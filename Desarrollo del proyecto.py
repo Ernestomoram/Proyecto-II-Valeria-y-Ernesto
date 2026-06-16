@@ -339,3 +339,7 @@ class Juego:
         self.jugador_defensor = jugador1
         self.jugador_atacante = jugador2
         self.mostrar_facciones()
+
+ventana = tk.Tk()
+juego = Juego(ventana)
+ventana.mainloop()
