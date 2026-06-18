@@ -604,7 +604,222 @@ class Juego:
         for unidad in self.unidades:
             self.pintar_casilla(unidad.fila, unidad.columna, unidad.tipo, self.faccion_atacante)
         self.actualizar_info()
+    
+    def pintar_base(self, faccion):
+        cuadrantes = [("_base_00", BASE_FILA, BASE_COLUMNA),
+                      ("_base_01", BASE_FILA, BASE_COLUMNA + 1),
+                      ("_base_10", BASE_FILA + 1, BASE_COLUMNA),
+                      ("_base_11", BASE_FILA + 1, BASE_COLUMNA + 1)]
+        for sufijo, fila, columna in cuadrantes:
+            boton = self.botones[fila][columna]
+            imagen = self._imagen_sobre_arena(faccion + sufijo, fila, columna)
+            if imagen is not None:
+                boton.config(image=imagen, text="", compound=tk.CENTER)
+            else:
+                boton.config(image=self._tile_arena(fila, columna), text="B", compound=tk.CENTER, bg=COLORES[faccion]["base"])
 
+    def pintar_casilla(self, fila, columna, objeto, faccion):
+        boton = self.botones[fila][columna]
+        imagen = self._imagen_sobre_arena(faccion + "_" + objeto, fila, columna)
+        if imagen is not None:
+            boton.config(image=imagen, text="", compound=tk.CENTER)
+        else:
+            if objeto == "base":
+                color = COLORES[faccion]["base"]
+            elif objeto == "muro":
+                color = COLORES[faccion]["muro"]
+            elif objeto.startswith("torre"):
+                color = COLORES[faccion]["torre"]
+            else:
+                color = COLORES[faccion]["unidad"]
+            boton.config(image=self._img_vacia, text=TEXTOS[objeto], compound=tk.CENTER, bg=color)
+
+    def distancia(self, f1, c1, f2, c2):
+        return abs(f1 - f2) + abs(c1 - c2)
+
+    def unidad_mas_cercana(self, torre):
+        mejor = None
+        mejor_distancia = 999
+        for unidad in self.unidades:
+            d = self.distancia(torre.fila, torre.columna, unidad.fila, unidad.columna)
+            if d <= torre.alcance and d < mejor_distancia:
+                mejor = unidad
+                mejor_distancia = d
+        return mejor
+
+    def torre_en_posicion(self, fila, columna):
+        for torre in self.torres:
+            if torre.fila == fila and torre.columna == columna:
+                return torre
+        return None
+
+    def muro_en_posicion(self, fila, columna):
+        for muro in self.muros:
+            if muro[0] == fila and muro[1] == columna:
+                return muro
+        return None
+
+    def turno_combate(self):
+        self.escribir_log("---- Nuevo turno ----")
+        self.ataque_torres()
+        self.eliminar_unidades_muertas()
+        if self.revisar_fin_ronda():
+            return
+        self.turno_unidades()
+        self.eliminar_torres_y_muros_muertos()
+        self.actualizar_tablero()
+        self.revisar_fin_ronda()
+
+    def ataque_torres(self):
+        for torre in self.torres:
+            torre.turnos = torre.turnos + 1
+            unidad = self.unidad_mas_cercana(torre)
+            if unidad is not None:
+                unidad.recibir_dano(torre.dano, self)
+                self.escribir_log(torre.nombre + " atacó a " + unidad.nombre + ".")
+                if torre.turnos >= torre.cooldown:
+                    torre.habilidad(self, unidad)
+                    torre.turnos = 0
+
+    def eliminar_unidades_muertas(self):
+        vivas = []
+        for unidad in self.unidades:
+            if unidad.vida <= 0:
+                self.dinero_defensor = self.dinero_defensor + unidad.recompensa
+                self.escribir_log("El defensor ganó $" + str(unidad.recompensa) + " por eliminar " + unidad.nombre + ".")
+            else:
+                vivas.append(unidad)
+        self.unidades = vivas
+
+    def turno_unidades(self):
+        for unidad in self.unidades:
+            if unidad.congelada > 0:
+                unidad.congelada = unidad.congelada - 1
+                self.escribir_log(unidad.nombre + " está congelada y pierde el turno.")
+            else:
+                unidad.turnos = unidad.turnos + 1
+                efecto = "nada"
+                if unidad.turnos >= unidad.cooldown:
+                    efecto = unidad.habilidad(self)
+                    unidad.turnos = 0
+                ataques = 1
+                velocidad_turno = unidad.velocidad
+                if efecto == "ataque_doble":
+                    ataques = 2
+                if efecto == "velocidad":
+                    velocidad_turno = velocidad_turno + 1
+                self.mover_o_atacar(unidad, velocidad_turno, ataques)
+
+    def mover_o_atacar(self, unidad, velocidad_turno, ataques):
+        i = 0
+        while i < velocidad_turno:
+            objetivo = self.buscar_objetivo_cerca(unidad)
+            if objetivo != "nada":
+                j = 0
+                while j < ataques:
+                    self.atacar_objetivo(unidad, objetivo)
+                    j = j + 1
+                return
+            self.mover_hacia_base(unidad)
+            i = i + 1
+
+    def buscar_objetivo_cerca(self, unidad):
+        posiciones = [[unidad.fila - 1, unidad.columna], [unidad.fila + 1, unidad.columna], [unidad.fila, unidad.columna - 1], [unidad.fila, unidad.columna + 1]]
+        for p in posiciones:
+            f = p[0]
+            c = p[1]
+            if (f, c) in BASE_CELDAS:
+                return "base"
+            torre = self.torre_en_posicion(f, c)
+            if torre is not None:
+                return torre
+            muro = self.muro_en_posicion(f, c)
+            if muro is not None:
+                return muro
+        return "nada"
+
+    def atacar_objetivo(self, unidad, objetivo):
+        if objetivo == "base":
+            self.base.vida = self.base.vida - unidad.dano
+            self.dinero_atacante = self.dinero_atacante + unidad.dano
+            self.bono_atacante = self.bono_atacante + unidad.dano
+            self.escribir_log(unidad.nombre + " dañó la base. +$" + str(unidad.dano) + " para atacante.")
+        elif type(objetivo) == Torre:
+            objetivo.vida = objetivo.vida - unidad.dano
+            ganancia = unidad.dano // 2
+            self.dinero_atacante = self.dinero_atacante + ganancia
+            self.bono_atacante = self.bono_atacante + ganancia
+            self.escribir_log(unidad.nombre + " dañó una torre. +$" + str(ganancia) + " para atacante.")
+        else:
+            objetivo[2] = objetivo[2] - unidad.dano
+            self.escribir_log(unidad.nombre + " atacó un muro.")
+
+    def mover_hacia_base(self, unidad):
+        objetivo_fila, objetivo_columna = min(
+            BASE_CELDAS,
+            key=lambda c: abs(c[0] - unidad.fila) + abs(c[1] - unidad.columna)
+        )
+        nueva_fila = unidad.fila
+        nueva_columna = unidad.columna
+        if unidad.fila < objetivo_fila:
+            nueva_fila = unidad.fila + 1
+        elif unidad.fila > objetivo_fila:
+            nueva_fila = unidad.fila - 1
+        elif unidad.columna < objetivo_columna:
+            nueva_columna = unidad.columna + 1
+        elif unidad.columna > objetivo_columna:
+            nueva_columna = unidad.columna - 1
+        if not self.casilla_ocupada(nueva_fila, nueva_columna):
+            unidad.fila = nueva_fila
+            unidad.columna = nueva_columna
+
+    def eliminar_torres_y_muros_muertos(self):
+        nuevas_torres = []
+        for torre in self.torres:
+            if torre.vida <= 0:
+                self.dinero_atacante = self.dinero_atacante + 30
+                self.bono_atacante = self.bono_atacante + 30
+                self.escribir_log("El atacante destruyó una torre y ganó $30.")
+            else:
+                nuevas_torres.append(torre)
+        self.torres = nuevas_torres
+        nuevos_muros = []
+        for muro in self.muros:
+            if muro[2] > 0:
+                nuevos_muros.append(muro)
+            else:
+                self.escribir_log("Un muro fue destruido.")
+        self.muros = nuevos_muros
+
+    def revisar_fin_ronda(self):
+        if self.base.vida <= 0:
+            self.victorias_atacante = self.victorias_atacante + 1
+            self.escribir_log("El atacante ganó la ronda.")
+            self.fin_ronda()
+            return True
+        if len(self.unidades) == 0 and self.fase == "combate":
+            self.victorias_defensor = self.victorias_defensor + 1
+            self.escribir_log("El defensor ganó la ronda.")
+            self.fin_ronda()
+            return True
+        return False
+
+    def fin_ronda(self):
+        self.actualizar_tablero()
+        if self.victorias_defensor >= 3:
+            self.jugador_defensor.victorias_defensor = self.jugador_defensor.victorias_defensor + 1
+            self.guardar_jugadores()
+            messagebox.showinfo("Fin de partida", "Ganó la partida el defensor: " + self.jugador_defensor.usuario)
+            self.mostrar_login()
+        elif self.victorias_atacante >= 3:
+            self.jugador_atacante.victorias_atacante = self.jugador_atacante.victorias_atacante + 1
+            self.guardar_jugadores()
+            messagebox.showinfo("Fin de partida", "Ganó la partida el atacante: " + self.jugador_atacante.usuario)
+            self.mostrar_login()
+        else:
+            messagebox.showinfo("Ronda terminada", "Marcador: Defensor " + str(self.victorias_defensor) + " - Atacante " + str(self.victorias_atacante))
+            self.ronda = self.ronda + 1
+            self.iniciar_ronda()
 ventana = tk.Tk()
 juego = Juego(ventana)
 ventana.mainloop()
