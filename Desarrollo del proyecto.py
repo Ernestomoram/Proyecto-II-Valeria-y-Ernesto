@@ -23,6 +23,30 @@ BASE_CELDAS = {(BASE_FILA, BASE_COLUMNA), (BASE_FILA, BASE_COLUMNA + 1),
 
 FACCIONES = ["medieval", "futurista", "naturaleza"]
 
+IMAGENES_SELECCION_FACCION = {
+    "medieval": "boton_medieval.png",
+    "futurista": "boton_futurista.png",
+    "naturaleza": "boton_naturaleza.png"
+}
+
+COLORES = {
+    "medieval": {"base": "#8B4513", "muro": "#A9A9A9", "torre": "#B8860B", "unidad": "#DC143C"},
+    "futurista": {"base": "#4169E1", "muro": "#708090", "torre": "#00CED1", "unidad": "#9400D3"},
+    "naturaleza": {"base": "#228B22", "muro": "#8FBC8F", "torre": "#32CD32", "unidad": "#FF8C00"}
+}
+
+TEXTOS = {
+    "base": "B",
+    "muro": "M",
+    "torre_basica": "TB",
+    "torre_pesada": "TP",
+    "torre_magica": "TM",
+    "soldado": "S",
+    "tanque": "TQ",
+    "rapida": "R"
+}
+
+
 class Jugador:
     def __init__(self, usuario, contrasena, victorias_defensor=0, victorias_atacante=0):
         self.usuario = usuario
@@ -169,6 +193,7 @@ class Juego:
         self._tiles_arena = {}
         self._tiles_pil = {}
         self._cache_comp = {}
+        self._img_botones = []
         self.iniciar_musica()
         self.mostrar_login()
 
@@ -204,14 +229,150 @@ class Juego:
         return None
 
     def iniciar_musica(self):
+        self._musica_reproduciendo = False
         if pygame is None:
             return
         try:
             pygame.mixer.init()
-            pygame.mixer.music.load("assets/music/musica.mp3")
+            pygame.mixer.music.load("assets/music/music.mp3")
             pygame.mixer.music.play(-1)
+            self._musica_reproduciendo = True
         except Exception:
             pass
+
+    def alternar_musica_simple(self):
+        if pygame is not None:
+            try:
+                if self._musica_reproduciendo:
+                    pygame.mixer.music.pause()
+                else:
+                    pygame.mixer.music.unpause()
+            except Exception:
+                pass
+        self._musica_reproduciendo = not self._musica_reproduciendo
+
+    def alternar_musica(self, boton):
+        self.alternar_musica_simple()
+        boton.config(text="Detener música" if self._musica_reproduciendo else "Reproducir música")
+
+    def _crear_boton_musica(self, parent):
+        boton = tk.Button(parent, text="Detener música" if self._musica_reproduciendo else "Reproducir música",
+                           font=("Copperplate Gothic Bold", 10))
+        boton.config(command=lambda: self.alternar_musica(boton))
+        return boton
+
+    def _crear_boton_musica_imagen(self, parent, bg="black", ancho_boton=160):
+        if Image is not None:
+            try:
+                img = Image.open("assets/facciones/botones/boton_musica.png")
+                alto_boton = round(ancho_boton * img.height / img.width)
+                img = img.resize((ancho_boton, alto_boton), Image.LANCZOS)
+                foto = ImageTk.PhotoImage(img)
+                self._img_botones.append(foto)
+                return tk.Button(parent, image=foto, command=self.alternar_musica_simple,
+                                  bg=bg, activebackground=bg, bd=0, highlightthickness=0)
+            except Exception:
+                pass
+        return self._crear_boton_musica(parent)
+
+    def _agregar_boton_musica_canvas(self, canvas, ancho, ancho_boton=150):
+        if Image is not None:
+            try:
+                img = Image.open("assets/facciones/botones/boton_musica.png")
+                alto_boton = round(ancho_boton * img.height / img.width)
+                img = img.resize((ancho_boton, alto_boton), Image.LANCZOS)
+                foto = ImageTk.PhotoImage(img)
+                self._img_botones.append(foto)
+                item = canvas.create_image(ancho - 10, 10, anchor=tk.NE, image=foto)
+                canvas.tag_bind(item, "<Button-1>", lambda e: self.alternar_musica_simple())
+                canvas.tag_bind(item, "<Enter>", lambda e: canvas.config(cursor="hand2"))
+                canvas.tag_bind(item, "<Leave>", lambda e: canvas.config(cursor="arrow"))
+                return
+            except Exception:
+                pass
+        boton = self._crear_boton_musica(canvas)
+        canvas.create_window(ancho - 10, 10, anchor=tk.NE, window=boton)
+
+    def _colocar_boton_imagen(self, canvas, cx, y, ruta, comando, texto_alt, ancho_boton=240):
+        if Image is not None:
+            try:
+                img = Image.open(ruta)
+                alto_boton = round(ancho_boton * img.height / img.width)
+                img = img.resize((ancho_boton, alto_boton), Image.LANCZOS)
+                foto = ImageTk.PhotoImage(img)
+                self._img_botones.append(foto)
+                item = canvas.create_image(cx, y, image=foto)
+                canvas.tag_bind(item, "<Button-1>", lambda e: comando())
+                canvas.tag_bind(item, "<Enter>", lambda e: canvas.config(cursor="hand2"))
+                canvas.tag_bind(item, "<Leave>", lambda e: canvas.config(cursor="arrow"))
+                return
+            except Exception:
+                pass
+        canvas.create_window(cx, y, window=tk.Button(canvas, text=texto_alt, command=comando, width=26, font=("Copperplate Gothic Bold", 11)))
+
+    def _colocar_selector_facciones(self, canvas, cx, y, variable, ancho_img=110, espacio=20):
+        fotos = []
+        alturas = []
+        if Image is not None:
+            for faccion in FACCIONES:
+                ruta = "assets/facciones/botones/" + IMAGENES_SELECCION_FACCION[faccion]
+                try:
+                    img = Image.open(ruta)
+                    alto_img = round(ancho_img * img.height / img.width)
+                    img = img.resize((ancho_img, alto_img), Image.LANCZOS)
+                    foto = ImageTk.PhotoImage(img)
+                    self._img_botones.append(foto)
+                    fotos.append(foto)
+                    alturas.append(alto_img)
+                except Exception:
+                    fotos.append(None)
+                    alturas.append(0)
+        else:
+            fotos = [None] * len(FACCIONES)
+            alturas = [0] * len(FACCIONES)
+
+        if max(alturas) == 0:
+            x = cx - (len(FACCIONES) * 90) // 2
+            for faccion in FACCIONES:
+                rb = tk.Radiobutton(canvas, text=faccion, variable=variable, value=faccion,
+                                    bg="#1a1a1a", fg="white", selectcolor="#444444",
+                                    activebackground="#333333", activeforeground="white", font=("Copperplate Gothic Bold", 13))
+                canvas.create_window(x, y, window=rb)
+                x += 90
+            return 30
+
+        alto_max = max(alturas)
+        ancho_total = len(FACCIONES) * ancho_img + (len(FACCIONES) - 1) * espacio
+        x = cx - ancho_total // 2 + ancho_img // 2
+        marcos = {}
+
+        def redibujar():
+            for faccion, item_marco in marcos.items():
+                if variable.get() == faccion:
+                    canvas.itemconfig(item_marco, outline="black", width=4)
+                else:
+                    canvas.itemconfig(item_marco, outline="", width=0)
+
+        for i, faccion in enumerate(FACCIONES):
+            foto = fotos[i]
+            if foto is not None:
+                marco = canvas.create_rectangle(x - ancho_img // 2 - 4, y - alto_max // 2 - 4,
+                                                 x + ancho_img // 2 + 4, y + alto_max // 2 + 4,
+                                                 outline="", width=0)
+                item = canvas.create_image(x, y, image=foto)
+                marcos[faccion] = marco
+
+                def click(evento, f=faccion):
+                    variable.set(f)
+                    redibujar()
+
+                canvas.tag_bind(item, "<Button-1>", click)
+                canvas.tag_bind(marco, "<Button-1>", click)
+                canvas.tag_bind(item, "<Enter>", lambda e: canvas.config(cursor="hand2"))
+                canvas.tag_bind(item, "<Leave>", lambda e: canvas.config(cursor="arrow"))
+            x += ancho_img + espacio
+        redibujar()
+        return alto_max
 
     def _crear_canvas_fondo(self, ruta):
         self.ventana.state("zoomed")
@@ -271,36 +432,52 @@ class Juego:
         self.limpiar()
         self.fase = "login"
         canvas, ancho, alto = self._crear_canvas_fondo("assets/facciones/fondos/inicio.png")
+        self._img_botones = []
+        self._agregar_boton_musica_canvas(canvas, ancho)
         cx = ancho // 2
-        total_h = 490
+        ancho_titulo = min(420, ancho - 160)
+        alto_titulo = round(ancho_titulo * 306 / 874)
+        incremento_titulo = alto_titulo // 2 + 40
+        total_h = incremento_titulo + 413
         y = (alto - total_h) // 2
-        canvas.create_text(cx, y, text="Registro e inicio de sesión", font=("Arial", 22, "bold"), fill="white")
-        y += 60
-        canvas.create_text(cx, y, text="Jugador defensor", font=("Arial", 14, "bold"), fill="white")
+        self._img_titulo = None
+        if Image is not None:
+            try:
+                img_titulo = Image.open("assets/facciones/botones/label_titulo.png").resize(
+                    (ancho_titulo, alto_titulo), Image.LANCZOS)
+                self._img_titulo = ImageTk.PhotoImage(img_titulo)
+                canvas.create_image(cx, y, image=self._img_titulo)
+            except Exception:
+                canvas.create_text(cx, y, text="Eclipse of Kingdoms", font=("Copperplate Gothic Bold", 22, "bold"), fill="white")
+        else:
+            canvas.create_text(cx, y, text="Eclipse of Kingdoms", font=("Copperplate Gothic Bold", 22, "bold"), fill="white")
+        y += incremento_titulo
+        canvas.create_text(cx, y, text="Jugador defensor", font=("Copperplate Gothic Bold", 14, "bold"), fill="white")
         y += 32
-        self.usuario_def = tk.Entry(canvas, width=30, font=("Arial", 12))
+        self.usuario_def = tk.Entry(canvas, width=30, font=("Copperplate Gothic Bold", 12), bg="black", fg="white", insertbackground="white")
         canvas.create_window(cx, y, window=self.usuario_def)
         y += 34
-        self.pass_def = tk.Entry(canvas, show="*", width=30, font=("Arial", 12))
+        self.pass_def = tk.Entry(canvas, show="*", width=30, font=("Copperplate Gothic Bold", 12), bg="black", fg="white", insertbackground="white")
         canvas.create_window(cx, y, window=self.pass_def)
         y += 54
-        canvas.create_text(cx, y, text="Jugador atacante", font=("Arial", 14, "bold"), fill="white")
+        canvas.create_text(cx, y, text="Jugador atacante", font=("Copperplate Gothic Bold", 14, "bold"), fill="white")
         y += 32
-        self.usuario_atq = tk.Entry(canvas, width=30, font=("Arial", 12))
+        self.usuario_atq = tk.Entry(canvas, width=30, font=("Copperplate Gothic Bold", 12), bg="black", fg="white", insertbackground="white")
         canvas.create_window(cx, y, window=self.usuario_atq)
         y += 34
-        self.pass_atq = tk.Entry(canvas, show="*", width=30, font=("Arial", 12))
+        self.pass_atq = tk.Entry(canvas, show="*", width=30, font=("Copperplate Gothic Bold", 12), bg="black", fg="white", insertbackground="white")
         canvas.create_window(cx, y, window=self.pass_atq)
         y += 54
-        canvas.create_window(cx, y, window=tk.Button(canvas, text="Registrar ambos", command=self.registrar_ambos, width=26, font=("Arial", 11)))
-        y += 44
-        canvas.create_window(cx, y, window=tk.Button(canvas, text="Iniciar sesión", command=self.iniciar_sesion, width=26, font=("Arial", 11)))
-        y += 44
-        canvas.create_window(cx, y, window=tk.Button(canvas, text="Ver top de jugadores", command=self.mostrar_top, width=26, font=("Arial", 11)))
-        y += 50
-        canvas.create_text(cx, y, text="Nota: el jugador 1 será defensor y el jugador 2 será atacante.",
-                           font=("Arial", 11), fill="white", width=ancho - 100)
-
+        self._colocar_boton_imagen(canvas, cx, y, "assets/facciones/botones/boton_registro.png",
+                                    self.registrar_ambos, "Registrar ambos")
+        y += 64
+        self._colocar_boton_imagen(canvas, cx, y, "assets/facciones/botones/boton_iniciar_sesion.png",
+                                    self.iniciar_sesion, "Iniciar sesión")
+        y += 64
+        self._colocar_boton_imagen(canvas, cx, y, "assets/facciones/botones/boton_top_jugadores.png",
+                                    self.mostrar_top, "Ver top de jugadores")
+        y += 45
+        
     def registrar_ambos(self):
         u1 = self.usuario_def.get()
         p1 = self.pass_def.get()
@@ -339,10 +516,12 @@ class Juego:
         self.jugador_defensor = jugador1
         self.jugador_atacante = jugador2
         self.mostrar_facciones()
-    
+
     def mostrar_top(self):
         self.limpiar()
         canvas, ancho, alto = self._crear_canvas_fondo("assets/facciones/fondos/inicio.png")
+        self._img_botones = []
+        self._agregar_boton_musica_canvas(canvas, ancho)
         cx = ancho // 2
         defensores = sorted(self.jugadores[:], key=lambda j: j.victorias_defensor, reverse=True)
         atacantes = sorted(self.jugadores[:], key=lambda j: j.victorias_atacante, reverse=True)
@@ -350,54 +529,63 @@ class Juego:
         n_atq = min(5, len(atacantes))
         total_h = 55 + 45 + n_def * 32 + 55 + 45 + n_atq * 32 + 55
         y = max(60, (alto - total_h) // 2)
-        canvas.create_text(cx, y, text="Top de jugadores", font=("Arial", 22, "bold"), fill="white")
+        canvas.create_text(cx, y, text="Top de jugadores", font=("Copperplate Gothic Bold", 22, "bold"), fill="white")
         y += 55
-        canvas.create_text(cx, y, text="Top 5 defensores", font=("Arial", 15, "bold"), fill="white")
+        canvas.create_text(cx, y, text="Top 5 defensores", font=("Copperplate Gothic Bold", 15, "bold"), fill="white")
         y += 40
         for i in range(n_def):
             texto = str(i + 1) + ".  " + defensores[i].usuario + "  —  " + str(defensores[i].victorias_defensor) + " victorias"
-            canvas.create_text(cx, y, text=texto, font=("Arial", 13), fill="white")
+            canvas.create_text(cx, y, text=texto, font=("Copperplate Gothic Bold", 13), fill="white")
             y += 32
         y += 25
-        canvas.create_text(cx, y, text="Top 5 atacantes", font=("Arial", 15, "bold"), fill="white")
+        canvas.create_text(cx, y, text="Top 5 atacantes", font=("Copperplate Gothic Bold", 15, "bold"), fill="white")
         y += 40
         for i in range(n_atq):
             texto = str(i + 1) + ".  " + atacantes[i].usuario + "  —  " + str(atacantes[i].victorias_atacante) + " victorias"
-            canvas.create_text(cx, y, text=texto, font=("Arial", 13), fill="white")
+            canvas.create_text(cx, y, text=texto, font=("Copperplate Gothic Bold", 13), fill="white")
             y += 32
         y += 35
-        canvas.create_window(cx, y, window=tk.Button(canvas, text="Volver", command=self.mostrar_login, width=20, font=("Arial", 12)))
+        self._colocar_boton_imagen(canvas, cx, y, "assets/facciones/botones/boton_volver.png",
+                                    self.mostrar_login, "Volver")
 
     def mostrar_facciones(self):
         self.limpiar()
         canvas, ancho, alto = self._crear_canvas_fondo("assets/facciones/fondos/inicio.png")
+        self._img_botones = []
+        self._agregar_boton_musica_canvas(canvas, ancho)
         cx = ancho // 2
-        total_h = 60 + 40 + 50 + len(FACCIONES) * 38 + 55 + len(FACCIONES) * 38 + 55
+        ancho_label = min(480, ancho - 160)
+        alto_label = round(ancho_label * 90 / 756)
+        incremento_label = alto_label // 2 + 45
+        total_h = incremento_label + 603
         y = max(50, (alto - total_h) // 2)
-        canvas.create_text(cx, y, text="Selección de facciones", font=("Arial", 22, "bold"), fill="white")
-        y += 50
+        self._img_label_facciones = None
+        if Image is not None:
+            try:
+                img_label = Image.open("assets/facciones/botones/label_seleccion_facciones.png").resize(
+                    (ancho_label, alto_label), Image.LANCZOS)
+                self._img_label_facciones = ImageTk.PhotoImage(img_label)
+                canvas.create_image(cx, y, image=self._img_label_facciones)
+            except Exception:
+                canvas.create_text(cx, y, text="Selección de facciones", font=("Copperplate Gothic Bold", 22, "bold"), fill="white")
+        else:
+            canvas.create_text(cx, y, text="Selección de facciones", font=("Copperplate Gothic Bold", 22, "bold"), fill="white")
+        y += incremento_label
         canvas.create_text(cx, y, text="El defensor y el atacante no pueden usar la misma facción.",
-                           font=("Arial", 13), fill="white", width=ancho - 100)
+                           font=("Copperplate Gothic Bold", 13), fill="white", width=ancho - 100)
         self.var_def = tk.StringVar(value=FACCIONES[0])
         self.var_atq = tk.StringVar(value=FACCIONES[1])
         y += 50
-        canvas.create_text(cx, y, text="Facción defensor", font=("Arial", 15, "bold"), fill="white")
-        for faccion in FACCIONES:
-            y += 38
-            rb = tk.Radiobutton(canvas, text=faccion, variable=self.var_def, value=faccion,
-                                bg="#1a1a1a", fg="white", selectcolor="#444444",
-                                activebackground="#333333", activeforeground="white", font=("Arial", 13))
-            canvas.create_window(cx, y, window=rb)
-        y += 55
-        canvas.create_text(cx, y, text="Facción atacante", font=("Arial", 15, "bold"), fill="white")
-        for faccion in FACCIONES:
-            y += 38
-            rb = tk.Radiobutton(canvas, text=faccion, variable=self.var_atq, value=faccion,
-                                bg="#1a1a1a", fg="white", selectcolor="#444444",
-                                activebackground="#333333", activeforeground="white", font=("Arial", 13))
-            canvas.create_window(cx, y, window=rb)
-        y += 55
-        canvas.create_window(cx, y, window=tk.Button(canvas, text="Iniciar partida", command=self.iniciar_partida, width=26, font=("Arial", 12)))
+        canvas.create_text(cx, y, text="Reino defensor", font=("Copperplate Gothic Bold", 15, "bold"), fill="white")
+        y += 125
+        alto_def = self._colocar_selector_facciones(canvas, cx, y, self.var_def)
+        y += alto_def // 2 + 55
+        canvas.create_text(cx, y, text="Reino atacante", font=("Copperplate Gothic Bold", 15, "bold"), fill="white")
+        y += 125
+        alto_atq = self._colocar_selector_facciones(canvas, cx, y, self.var_atq)
+        y += alto_atq // 2 + 64
+        self._colocar_boton_imagen(canvas, cx, y, "assets/facciones/botones/boton_iniciar_partida.png",
+                                    self.iniciar_partida, "Iniciar partida")
 
     def iniciar_partida(self):
         if self.var_def.get() == self.var_atq.get():
@@ -453,12 +641,26 @@ class Juego:
 
     def mostrar_juego(self):
         self.limpiar()
+        self.ventana.state("zoomed")
+        self.ventana.update()
+        ancho = self.ventana.winfo_width()
+        alto = self.ventana.winfo_height()
+        self._img_fondo_juego = None
+        if Image is not None:
+            try:
+                img_fondo = Image.open("assets/facciones/fondos/fondo_arena.png").resize((ancho, alto), Image.LANCZOS)
+                self._img_fondo_juego = ImageTk.PhotoImage(img_fondo)
+                tk.Label(self.ventana, image=self._img_fondo_juego, bd=0).place(x=0, y=0, relwidth=1, relheight=1)
+            except Exception:
+                pass
         self._img_vacia = tk.PhotoImage(width=TAMANO_CELDA, height=TAMANO_CELDA)
         self._cargar_tiles_arena()
-        marco_info = tk.Frame(self.ventana)
-        marco_info.pack(pady=5)
-        self.label_info = tk.Label(marco_info, text="", font=("Arial", 12, "bold"))
-        self.label_info.pack()
+        self._img_botones = []
+        marco_superior = tk.Frame(self.ventana, bg="black")
+        marco_superior.pack(fill=tk.X)
+        self._crear_boton_musica_imagen(marco_superior, bg="black", ancho_boton=100).pack(side=tk.RIGHT, padx=10, pady=3)
+        self.label_info = tk.Label(marco_superior, text="", font=("Copperplate Gothic Bold", 8, "bold"), bg="black", fg="white")
+        self.label_info.pack(side=tk.LEFT, padx=10, pady=5)
         marco = tk.Frame(self.ventana)
         marco.pack()
         self.botones = []
@@ -474,30 +676,34 @@ class Juego:
                 boton.grid(row=fila, column=columna, padx=0, pady=0)
                 fila_botones.append(boton)
             self.botones.append(fila_botones)
-        marco_controles = tk.Frame(self.ventana)
+        marco_controles = tk.Frame(self.ventana, bg="black")
         marco_controles.pack(pady=8)
         self.marco_controles = marco_controles
-        self.log = tk.Text(self.ventana, width=80, height=8)
+        self.log = tk.Text(self.ventana, width=80, height=8, bg="black", fg="white", insertbackground="white")
         self.log.pack(pady=5)
         self.actualizar_controles()
         self.actualizar_tablero()
+
+    def _crear_boton_control(self, texto, comando):
+        return tk.Button(self.marco_controles, text=texto, command=comando,
+                          bg="black", fg="white", activebackground="#333333", activeforeground="white")
 
     def actualizar_controles(self):
         for widget in self.marco_controles.winfo_children():
             widget.destroy()
         if self.fase == "defensa":
-            tk.Button(self.marco_controles, text="Muro $25", command=lambda: self.cambiar_seleccion("muro")).grid(row=0, column=0)
-            tk.Button(self.marco_controles, text="Torre básica $60", command=lambda: self.cambiar_seleccion("torre_basica")).grid(row=0, column=1)
-            tk.Button(self.marco_controles, text="Torre pesada $110", command=lambda: self.cambiar_seleccion("torre_pesada")).grid(row=0, column=2)
-            tk.Button(self.marco_controles, text="Torre mágica $90", command=lambda: self.cambiar_seleccion("torre_magica")).grid(row=0, column=3)
-            tk.Button(self.marco_controles, text="Terminar defensa", command=self.terminar_defensa).grid(row=0, column=4)
+            self._crear_boton_control("Muro $25", lambda: self.cambiar_seleccion("muro")).grid(row=0, column=0)
+            self._crear_boton_control("Torre básica $60", lambda: self.cambiar_seleccion("torre_basica")).grid(row=0, column=1)
+            self._crear_boton_control("Torre pesada $110", lambda: self.cambiar_seleccion("torre_pesada")).grid(row=0, column=2)
+            self._crear_boton_control("Torre mágica $90", lambda: self.cambiar_seleccion("torre_magica")).grid(row=0, column=3)
+            self._crear_boton_control("Terminar defensa", self.terminar_defensa).grid(row=0, column=4)
         elif self.fase == "ataque":
-            tk.Button(self.marco_controles, text="Soldado $45", command=lambda: self.cambiar_seleccion("soldado")).grid(row=0, column=0)
-            tk.Button(self.marco_controles, text="Tanque $95", command=lambda: self.cambiar_seleccion("tanque")).grid(row=0, column=1)
-            tk.Button(self.marco_controles, text="Rápida $65", command=lambda: self.cambiar_seleccion("rapida")).grid(row=0, column=2)
-            tk.Button(self.marco_controles, text="Iniciar combate", command=self.iniciar_combate).grid(row=0, column=3)
+            self._crear_boton_control("Soldado $45", lambda: self.cambiar_seleccion("soldado")).grid(row=0, column=0)
+            self._crear_boton_control("Tanque $95", lambda: self.cambiar_seleccion("tanque")).grid(row=0, column=1)
+            self._crear_boton_control("Rápida $65", lambda: self.cambiar_seleccion("rapida")).grid(row=0, column=2)
+            self._crear_boton_control("Iniciar combate", self.iniciar_combate).grid(row=0, column=3)
         elif self.fase == "combate":
-            tk.Button(self.marco_controles, text="Ejecutar turno", command=self.turno_combate).grid(row=0, column=0)
+            self._crear_boton_control("Ejecutar turno", self.turno_combate).grid(row=0, column=0)
         self.actualizar_info()
 
     def actualizar_info(self):
@@ -604,7 +810,7 @@ class Juego:
         for unidad in self.unidades:
             self.pintar_casilla(unidad.fila, unidad.columna, unidad.tipo, self.faccion_atacante)
         self.actualizar_info()
-    
+
     def pintar_base(self, faccion):
         cuadrantes = [("_base_00", BASE_FILA, BASE_COLUMNA),
                       ("_base_01", BASE_FILA, BASE_COLUMNA + 1),
@@ -820,6 +1026,8 @@ class Juego:
             messagebox.showinfo("Ronda terminada", "Marcador: Defensor " + str(self.victorias_defensor) + " - Atacante " + str(self.victorias_atacante))
             self.ronda = self.ronda + 1
             self.iniciar_ronda()
+
+
 ventana = tk.Tk()
 juego = Juego(ventana)
 ventana.mainloop()
