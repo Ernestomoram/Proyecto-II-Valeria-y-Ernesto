@@ -1,0 +1,26 @@
+[
+    {
+        "usuario": "o",
+        "contrasena": "o",
+        "victorias_defensor": 0,
+        "victorias_atacante": 1
+    },
+    {
+        "usuario": "e",
+        "contrasena": "e",
+        "victorias_defensor": 0,
+        "victorias_atacante": 1
+    },
+    {
+        "usuario": "Q",
+        "contrasena": "Q",
+        "victorias_defensor": 0,
+        "victorias_atacante": 0
+    },
+    {
+        "usuario": "A",
+        "contrasena": "A",
+        "victorias_defensor": 0,
+        "victorias_atacante": 0
+    }
+]
